@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark antialiased">
+<head>
+    <meta charset="UTF-8">
+    <!-- 아이패드 및 모바일 전체화면 앱 뷰포트 설정 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- iOS / iPadOS 홈 화면 추가 시 네이티브 앱처럼 실행 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="개인정보 가림막">
+    <meta name="theme-color" content="#09090b">
+
+    <title>개인정보 가림막 · 오프라인 모자이크 & 블러 스튜디오</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts: Inter & Noto Sans KR -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Inter"', '"Noto Sans KR"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* 아이패드 노치/홈 인디케이터 안전 영역 처리 및 브라우저 기본 터치 제스처 방지 */
+        html, body {
+            overscroll-behavior: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 저장 미리보기 이미지는 아이패드에서 길게 눌러 '사진에 저장' 메뉴가 뜨도록 허용 */
+        .allow-callout {
+            -webkit-touch-callout: default !important;
+            user-select: auto !important;
+            -webkit-user-select: auto !important;
+        }
+
+        /* 캔버스 위에서 두 손가락 줌/드로잉 시 브라우저 스크롤 차단 */
+        #canvasStage {
+            touch-action: none;
+        }
+
+        /* 커스텀 레인지 슬라이더 스타일 */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: #27272a;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #10b981;
+            border: 2px solid #ffffff;
+            margin-top: -6px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+        }
+
+        /* 토스트 알림 팝업 애니메이션 */
+        @keyframes toastPop {
+            0% { opacity: 0; transform: translate(-50%, -10px) scale(0.95); }
+            100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+        .toast-active {
+            animation: toastPop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 h-[100dvh] flex flex-col overflow-hidden">
+
+    <!-- 상단 보안 & 컨트롤 헤더 -->
+    <header class="z-30 bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 px-3 sm:px-5 h-14 sm:h-16 flex items-center justify-between gap-2 shrink-0">
+        <!-- 좌측: 보안 뱃지 & 사진 열기 -->
+        <div class="flex items-center gap-2 sm:gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm shadow-emerald-500/20 shrink-0">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                </svg>
+            </div>
+            <div class="hidden md:block">
+                <h1 class="text-sm font-bold tracking-tight text-white leading-tight">개인정보 가림막</h1>
+                <p class="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                    오프라인 로컬 보안 모드
+                </p>
+            </div>
+
+            <!-- 이미지 불러오기 버튼 -->
+            <label for="fileInput" class="ml-1 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-[0.98] text-xs sm:text-sm font-semibold text-zinc-100 border border-zinc-700/80 cursor-pointer transition">
+                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span>사진 열기</span>
+            </label>
+            <input type="file" id="fileInput" accept="image/*" class="hidden">
+        </div>
+
+        <!-- 중앙: 실행 취소 / 다시 실행 / 원본 비교 -->
+        <div class="flex items-center gap-1 sm:gap-1.5">
+            <button type="button" id="undoBtn" onclick="undo()" disabled title="실행 취소" class="p-2.5 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 disabled:opacity-35 disabled:pointer-events-none text-zinc-200 border border-zinc-700/70 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
+                </svg>
+            </button>
+            <button type="button" id="redoBtn" onclick="redo()" disabled title="다시 실행" class="p-2.5 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 disabled:opacity-35 disabled:pointer-events-none text-zinc-200 border border-zinc-700/70 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"></path>
+                </svg>
+            </button>
+
+            <!-- 누르고 있는 동안 원본 보기 -->
+            <button type="button" id="compareBtn" disabled title="길게 눌러 원본 비교" class="px-2.5 py-2 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 disabled:opacity-35 disabled:pointer-events-none text-xs font-medium text-zinc-300 border border-zinc-700/70 transition flex items-center gap-1">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+                <span class="hidden sm:inline">원본 비교</span>
+            </button>
+        </div>
+
+        <!-- 우측: 고해상도 보안 저장 버튼 -->
+        <div class="flex items-center gap-2">
+            <button type="button" id="exportBtn" onclick="exportSecureImage()" disabled class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:pointer-events-none active:scale-[0.98] text-xs sm:text-sm font-semibold text-white shadow-sm shadow-emerald-600/30 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                </svg>
+                <span>안전 저장</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 메인 작업 캔버스 스테이지 -->
+    <main id="canvasStage" class="relative flex-1 w-full bg-zinc-950 overflow-hidden flex items-center justify-center">
+        
+        <!-- 메인 인터랙티브 디스플레이 캔버스 -->
+        <canvas id="displayCanvas" class="w-full h-full block"></canvas>
+
+        <!-- 이미지 로드 전 초기 안내 카드 -->
+        <div id="emptyState" class="absolute inset-0 flex items-center justify-center p-4 z-10 pointer-events-auto">
+            <div class="max-w-md w-full bg-zinc-900/95 backdrop-blur-md border-2 border-dashed border-zinc-700 hover:border-emerald-500 rounded-3xl p-7 sm:p-9 text-center shadow-2xl transition">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 mb-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-lg sm:text-xl font-bold text-white">개인정보를 가릴 사진 선택</h2>
+                <p class="mt-2 text-xs sm:text-sm text-zinc-400 leading-relaxed">
+                    얼굴, 계좌번호, 주소가 담긴 스크린샷을 <strong class="text-zinc-200">외부 서버 전송 없이 기기 내부에서</strong> 안전하게 모자이크·블러 처리합니다.
+                </p>
+
+                <div class="mt-5 flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-emerald-400/90">
+                    <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">✓ 100% 오프라인 작동</span>
+                    <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">✓ GPS 위치정보 자동 삭제</span>
+                </div>
+
+                <div class="mt-6 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                    <button type="button" onclick="document.getElementById('fileInput').click()" class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold text-white shadow-lg shadow-emerald-600/25 transition">
+                        사진첩에서 불러오기
+                    </button>
+                    <button type="button" onclick="loadSampleDocument()" class="w-full sm:w-auto px-4 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-sm font-medium text-zinc-300 border border-zinc-700 transition">
+                        샘플 문서로 테스트
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 우측 상단 플로팅 줌 & 초기화 컨트롤 -->
+        <div id="floatingTopControls" class="hidden absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-zinc-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-zinc-800 shadow-lg">
+            <button type="button" onclick="resetAllEdits()" title="모든 편집 초기화" class="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-rose-950/70 hover:text-rose-300 text-xs font-medium text-zinc-300 transition">
+                전체 초기화
+            </button>
+            <div class="h-4 w-[1px] bg-zinc-700 mx-0.5"></div>
+            <button type="button" onclick="adjustZoom(0.8)" class="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-sm flex items-center justify-center">-</button>
+            <button type="button" id="zoomLabel" onclick="fitCanvasToScreen()" title="화면에 맞추기" class="px-2 py-1 text-xs font-semibold text-zinc-300 tabular-nums">100%</button>
+            <button type="button" onclick="adjustZoom(1.25)" class="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-sm flex items-center justify-center">+</button>
+        </div>
+
+    </main>
+
+    <!-- 하단 도구 옵션 바 + 메인 툴 독 -->
+    <footer id="toolDock" class="hidden z-30 bg-zinc-900/95 backdrop-blur-md border-t border-zinc-800 px-3 sm:px-6 pt-2.5 pb-3 shrink-0">
+        <div class="max-w-3xl mx-auto flex flex-col gap-2.5">
+            
+            <!-- 1. 선택된 도구별 세부 옵션 바 -->
+            <div class="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-zinc-800/85 border border-zinc-700/60 min-h-[46px]">
+                
+                <!-- 브러시 크기 슬라이더 (모자이크/블러/단색/복원 브러시일 때 표시) -->
+                <div id="brushSizeGroup" class="flex items-center gap-2.5 flex-1 min-w-[160px]">
+                    <span class="text-xs font-semibold text-zinc-300 whitespace-nowrap">펜 굵기</span>
+                    <input type="range" id="brushSizeSlider" min="10" max="130" value="42" oninput="onOptionChanged()" class="flex-1 max-w-[160px]">
+                    <span id="brushSizeValue" class="text-xs font-bold text-emerald-400 w-9 text-right tabular-nums">42px</span>
+                </div>
+
+                <!-- 사각 가림막 스타일 선택기 (사각 가림막 도구일 때 표시) -->
+                <div id="rectStyleGroup" class="hidden flex items-center gap-1.5">
+                    <span class="text-xs font-semibold text-zinc-300 mr-1">가림 스타일:</span>
+                    <button type="button" onclick="setRectEffect('mosaic')" id="rect-mosaic" class="rect-style-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600 text-white transition">모자이크</button>
+                    <button type="button" onclick="setRectEffect('blur')" id="rect-blur" class="rect-style-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 hover:text-white transition">블러</button>
+                    <button type="button" onclick="setRectEffect('solid')" id="rect-solid" class="rect-style-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 hover:text-white transition">단색 바</button>
+                </div>
+
+                <!-- 모자이크 입자 크기 슬라이더 -->
+                <div id="mosaicIntensityGroup" class="flex items-center gap-2.5 flex-1 min-w-[160px]">
+                    <span class="text-xs font-semibold text-zinc-300 whitespace-nowrap">입자 크기</span>
+                    <input type="range" id="mosaicSizeSlider" min="6" max="56" value="20" oninput="onEffectParamChanged()" class="flex-1 max-w-[160px]">
+                    <span id="mosaicSizeValue" class="text-xs font-bold text-emerald-400 w-9 text-right tabular-nums">20px</span>
+                </div>
+
+                <!-- 블러 강도 슬라이더 -->
+                <div id="blurIntensityGroup" class="hidden flex items-center gap-2.5 flex-1 min-w-[160px]">
+                    <span class="text-xs font-semibold text-zinc-300 whitespace-nowrap">흐림 강도</span>
+                    <input type="range" id="blurStrengthSlider" min="4" max="44" value="18" oninput="onEffectParamChanged()" class="flex-1 max-w-[160px]">
+                    <span id="blurStrengthValue" class="text-xs font-bold text-emerald-400 w-9 text-right tabular-nums">18</span>
+                </div>
+
+                <!-- 단색 컬러 & 배경색 스포이드 그룹 -->
+                <div id="solidColorGroup" class="hidden flex items-center gap-2">
+                    <span class="text-xs font-semibold text-zinc-300">색상:</span>
+                    <button type="button" onclick="setSolidColor('#09090b')" id="swatch-black" class="solid-swatch w-6 h-6 rounded-full bg-zinc-950 border-2 border-emerald-400 shadow-sm" title="검정 마스킹"></button>
+                    <button type="button" onclick="setSolidColor('#ffffff')" id="swatch-white" class="solid-swatch w-6 h-6 rounded-full bg-white border-2 border-zinc-600 shadow-sm" title="흰색 마스킹"></button>
+                    <button type="button" onclick="setSolidColor('#ef4444')" id="swatch-red" class="solid-swatch w-6 h-6 rounded-full bg-red-500 border-2 border-zinc-600 shadow-sm" title="빨강 강조"></button>
+                    <!-- 커스텀 컬러 피커 -->
+                    <label class="relative w-6 h-6 rounded-full overflow-hidden border border-zinc-500 cursor-pointer flex items-center justify-center bg-gradient-to-tr from-amber-400 via-pink-500 to-indigo-500" title="직접 색상 선택">
+                        <input type="color" id="customColorInput" value="#09090b" oninput="setSolidColor(this.value)" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer">
+                    </label>
+                    <!-- 사진 속 배경색 스포이드 버튼 -->
+                    <button type="button" onclick="activateEyedropper()" id="eyedropperBtn" class="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-700 border border-zinc-700 text-xs font-medium text-zinc-200 transition" title="사진에서 배경색 추출">
+                        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
+                        </svg>
+                        <span>배경색 찍기</span>
+                    </button>
+                </div>
+
+                <!-- 복원 / 이동 안내 문구 -->
+                <div id="helperTextGroup" class="hidden flex-1 flex items-center justify-between text-xs text-zinc-400">
+                    <span id="helperTextLabel">문지른 부위만 원래 사진으로 복원합니다.</span>
+                    <button type="button" onclick="fitCanvasToScreen()" class="text-emerald-400 font-semibold hover:underline ml-2">화면 맞춤</button>
+                </div>
+            </div>
+
+            <!-- 2. 메인 6종 도구 선택 독 -->
+            <div class="grid grid-cols-6 gap-1.5 sm:gap-2">
+                <!-- 1. 모자이크 브러시 -->
+                <button type="button" onclick="selectTool('mosaic')" id="tool-mosaic" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl bg-emerald-600 text-white shadow-sm transition">
+                    <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    <span class="text-[11px] font-semibold">모자이크</span>
+                </button>
+
+                <!-- 2. 가우시안 블러 브러시 -->
+                <button type="button" onclick="selectTool('blur')" id="tool-blur" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800 transition">
+                    <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    <span class="text-[11px] font-medium">블러 흐림</span>
+                </button>
+
+                <!-- 3. 단색 마스킹 펜 -->
+                <button type="button" onclick="selectTool('solid')" id="tool-solid" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800 transition">
+                    <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                    </svg>
+                    <span class="text-[11px] font-medium">단색 펜</span>
+                </button>
+
+                <!-- 4. 사각 가림막 박스 (계좌번호/주소 원터치) -->
+                <button type="button" onclick="selectTool('rect')" id="tool-rect" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800 transition">
+                    <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="3" y="6" width="18" height="12" rx="2"></rect>
+                        <path stroke-linecap="round" d="M7 12h10"></path>
+                    </svg>
+                    <span class="text-[11px] font-medium">사각 가림</span>
+                </button>
+
+                <!-- 5. 원본 복원 브러시 -->
+                <button type="button" onclick="selectTool('restore')" id="tool-restore" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800 transition">
+                    <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <span class="text-[11px] font-medium">원본 복원</span>
+                </button>
+
+                <!-- 6. 화면 이동(손바닥) -->
+                <button type="button" onclick="selectTool('pan')" id="tool-pan" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800 transition">
+                    <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"></path>
+                    </svg>
+                    <span class="text-[11px] font-medium">이동/확대</span>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 고해상도 보안 저장 모달 (EXIF 위치정보 자동 삭제 안내 + iPadOS 사진첩 저장 지원) -->
+    <div id="exportModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-md">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl text-center">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-semibold mb-2">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+                </svg>
+                GPS · 카메라 EXIF 메타데이터 완전 제거됨
+            </div>
+            <h3 class="text-base sm:text-lg font-bold text-white">안전하게 마스킹된 이미지 준비 완료</h3>
+            <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
+                아래 <strong class="text-emerald-400">'사진첩 저장'</strong> 버튼을 누르거나,<br>
+                미리보기 이미지를 <strong class="text-zinc-200">길게 눌러 '사진에 저장'</strong>을 선택하세요.
+            </p>
+            <div class="mt-4 p-2.5 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-center max-h-[250px] overflow-hidden">
+                <img id="exportedPreviewImg" alt="개인정보 마스킹 완료 이미지" class="allow-callout max-h-[225px] w-auto object-contain rounded-xl">
+            </div>
+            <div class="mt-5 flex flex-col gap-2">
+                <div class="flex items-center justify-center gap-2">
+                    <button type="button" id="shareSaveBtn" onclick="shareOrSaveToPhotos()" class="flex-1 py-3 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-sm font-semibold text-white shadow-sm transition flex items-center justify-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                        </svg>
+                        <span>사진첩 저장 · 공유</span>
+                    </button>
+                    <a id="directDownloadLink" download="masked_safe.png" onclick="onDirectDownloadClick()" class="py-3 px-3.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-sm font-medium text-zinc-200 transition cursor-pointer whitespace-nowrap">
+                        파일 저장
+                    </a>
+                </div>
+                <button type="button" onclick="closeExportModal()" class="w-full py-2.5 rounded-xl bg-zinc-800/60 hover:bg-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition">
+                    닫고 계속 편집하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상단 플로팅 토스트 알림 -->
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 hidden items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/95 text-white text-xs sm:text-sm font-medium border border-zinc-700 shadow-xl backdrop-blur-md">
+        <span class="text-emerald-400 font-bold">✓</span>
+        <span id="toastText">완료되었습니다.</span>
+    </div>
+
+    <script>
+        /**
+         * 오프라인 개인정보 모자이크 & 블러 가림막 스튜디오 엔진
+         * - 60fps 실시간 브러시 렌더링을 위한 Pre-filtered Effect Layer 합성 구조
+         * - 픽셀 모자이크(Block Pixelation), 가우시안 블러(iOS Safari 호환 폴백 내장), 단색/스포이드 마스킹, 사각 가림막 박스 지원
+         * - 아이패드 멀티터치(두 손가락 핀치 줌/이동) 및 애플 펜슬 포인터 대응
+         * - 저장 시 Canvas 재인코딩을 통해 원본 사진의 GPS·기기 EXIF 메타데이터 자동 파기
+         */
+
+        const displayCanvas = document.getElementById('displayCanvas');
+        const dCtx = displayCanvas.getContext('2d');
+
+        // 실제 원본 해상도 작업 캔버스
+        const workCanvas = document.createElement('canvas');
+        const wCtx = workCanvas.getContext('2d', { willReadFrequently: true });
+
+        // 원본 보존 캔버스 (모자이크/블러 효과 생성 기준 및 복원 브러시용)
+        const origCanvas = document.createElement('canvas');
+        const oCtx = origCanvas.getContext('2d', { willReadFrequently: true });
+
+        // 현재 선택된 효과(전체 모자이크 / 전체 블러 / 단색)가 미리 렌더링되는 오프스크린 캔버스
+        const effectCanvas = document.createElement('canvas');
+        const eCtx = effectCanvas.getContext('2d');
+
+        // 실시간 브러시 스트로크 마스크용 임시 캔버스
+        const strokeMaskCanvas = document.createElement('canvas');
+        const smCtx = strokeMaskCanvas.getContext('2d');
+
+        const strokePreviewCanvas = document.createElement('canvas');
+        const spCtx = strokePreviewCanvas.getContext('2d');
+
+        // 애플리케이션 상태
+        let hasImage = false;
+        let imgWidth = 0;
+        let imgHeight = 0;
+        let currentTool = 'mosaic';   // 'mosaic' | 'blur' | 'solid' | 'rect' | 'restore' | 'pan'
+        let rectEffect = 'mosaic';    // 'mosaic' | 'blur' | 'solid'
+        let solidColor = '#09090b';
+        let isEyedropperActive = false;
+        let isComparingOriginal = false;
+
+        // 뷰포트 변환 (줌 & 팬)
+        let zoom = 1;
+        let panX = 0;
+        let panY = 0;
+
+        // 실행 취소 / 다시 실행 스택
+        let undoStack = [];
+        let redoStack = [];
+        const MAX_HISTORY = 18;
+
+        // 포인터 및 멀티터치 추적
+        const activePointers = new Map();
+        let isDrawing = false;
+        let lastImgPt = null;
+        let rectStartPt = null;
+        let rectEndPt = null;
+        let currentCursorScreen = null;
+
+        // 핀치 줌 이전 상태
+        let prevPinchDist = null;
+        let prevPinchCenter = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            resizeDisplayCanvas();
+            setupEvents();
+        });
+
+        window.addEventListener('resize', () => {
+            resizeDisplayCanvas();
+            render();
+        });
+
+        function resizeDisplayCanvas() {
+            const stage = document.getElementById('canvasStage');
+            const rect = stage.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            displayCanvas.width = Math.floor(rect.width * dpr);
+            displayCanvas.height = Math.floor(rect.height * dpr);
+            dCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        function setupEvents() {
+            document.getElementById('fileInput').addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    loadImageFromFile(e.target.files[0]);
+                }
+            });
+
+            // 드래그 앤 드롭 업로드
+            const stage = document.getElementById('canvasStage');
+            stage.addEventListener('dragover', (e) => e.preventDefault());
+            stage.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    loadImageFromFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            // 원본 비교 버튼 (누르고 있는 동안 원본 표시)
+            const compareBtn = document.getElementById('compareBtn');
+            const startCompare = (e) => {
+                if (!hasImage) return;
+                e.preventDefault();
+                isComparingOriginal = true;
+                render();
+            };
+            const endCompare = () => {
+                if (!isComparingOriginal) return;
+                isComparingOriginal = false;
+                render();
+            };
+            compareBtn.addEventListener('pointerdown', startCompare);
+            window.addEventListener('pointerup', endCompare);
+            window.addEventListener('pointercancel', endCompare);
+
+            // 캔버스 포인터 이벤트
+            displayCanvas.addEventListener('pointerdown', onPointerDown);
+            displayCanvas.addEventListener('pointermove', onPointerMove);
+            displayCanvas.addEventListener('pointerup', onPointerUp);
+            displayCanvas.addEventListener('pointercancel', onPointerUp);
+            displayCanvas.addEventListener('pointerleave', () => {
+                currentCursorScreen = null;
+                render();
+            });
+
+            // 데스크톱/트랙패드 휠 줌
+            displayCanvas.addEventListener('wheel', (e) => {
+                if (!hasImage) return;
+                e.preventDefault();
+                const rect = displayCanvas.getBoundingClientRect();
+                const factor = e.deltaY < 0 ? 1.12 : 0.88;
+                zoomAtPoint(e.clientX - rect.left, e.clientY - rect.top, factor);
+            }, { passive: false });
+        }
+
+        function loadImageFromFile(file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => initWorkspaceWithImage(img);
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        /**
+         * 테스트용 가상 영수증/배송장 샘플 이미지 생성
+         */
+        function loadSampleDocument() {
+            const svgMarkup = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1100" viewBox="0 0 900 1100">
+                    <rect width="900" height="1100" fill="#f1f5f9"/>
+                    <rect x="90" y="70" width="720" height="960" rx="28" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/>
+                    
+                    <!-- 상단 헤더 -->
+                    <rect x="90" y="70" width="720" height="110" rx="28" fill="#0f172a"/>
+                    <rect x="90" y="140" width="720" height="40" fill="#0f172a"/>
+                    <text x="140" y="138" font-family="sans-serif" font-size="30" font-weight="bold" fill="#ffffff">이체 확인증 · 배송 안내서 (테스트용 샘플)</text>
+                    
+                    <!-- 가상 인물 프로필 영역 -->
+                    <rect x="140" y="215" width="140" height="165" rx="18" fill="#e2e8f0"/>
+                    <circle cx="210" cy="275" r="32" fill="#64748b"/>
+                    <path d="M160 365 C160 322, 260 322, 260 365" fill="#64748b"/>
+                    
+                    <text x="315" y="255" font-family="sans-serif" font-size="22" fill="#64748b">수취인 성명</text>
+                    <text x="315" y="295" font-family="sans-serif" font-size="34" font-weight="bold" fill="#0f172a">김민준 (950412-1******)</text>
+                    <text x="315" y="340" font-family="sans-serif" font-size="22" fill="#64748b">연락처</text>
+                    <text x="315" y="375" font-family="sans-serif" font-size="28" font-weight="bold" fill="#0f172a">010-1234-5678</text>
+
+                    <line x1="140" y1="415" x2="760" y2="415" stroke="#e2e8f0" stroke-width="2"/>
+
+                    <!-- 계좌번호 섹션 -->
+                    <text x="140" y="470" font-family="sans-serif" font-size="22" fill="#64748b">입금 계좌번호</text>
+                    <rect x="140" y="490" width="620" height="68" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+                    <text x="165" y="534" font-family="sans-serif" font-size="30" font-weight="bold" fill="#0284c7">우리은행 1002-987-654321</text>
+
+                    <!-- 주소 섹션 -->
+                    <text x="140" y="615" font-family="sans-serif" font-size="22" fill="#64748b">배송지 도로명 주소</text>
+                    <rect x="140" y="635" width="620" height="105" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+                    <text x="165" y="680" font-family="sans-serif" font-size="26" font-weight="bold" fill="#0f172a">경기도 성남시 분당구 판교역로 166</text>
+                    <text x="165" y="720" font-family="sans-serif" font-size="26" font-weight="bold" fill="#0f172a">현대백화점 오피스동 1204호</text>
+
+                    <!-- 결제 금액 & 바코드 -->
+                    <text x="140" y="800" font-family="sans-serif" font-size="22" fill="#64748b">승인 번호</text>
+                    <text x="140" y="838" font-family="sans-serif" font-size="28" font-weight="bold" fill="#0f172a">APP-2026-8849201</text>
+
+                    <rect x="140" y="885" width="620" height="95" rx="14" fill="#f1f5f9"/>
+                    <text x="450" y="942" text-anchor="middle" font-family="sans-serif" font-size="22" fill="#475569">손가락이나 애플 펜슬로 얼굴·계좌번호·주소를 문질러 가려보세요!</text>
+                </svg>
+            `;
+            const img = new Image();
+            img.onload = () => {
+                initWorkspaceWithImage(img);
+                showToast('샘플 문서가 열렸습니다. 개인정보 위를 문질러 가려보세요!');
+            };
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgMarkup);
+        }
+
+        function initWorkspaceWithImage(img) {
+            // 고해상도 화질을 유지하면서 iPad 메모리를 안정적으로 다루기 위해 최대 변 2400px 제한
+            const MAX_DIM = 2400;
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+
+            if (w > MAX_DIM || h > MAX_DIM) {
+                if (w > h) {
+                    h = Math.round((h * MAX_DIM) / w);
+                    w = MAX_DIM;
+                } else {
+                    w = Math.round((w * MAX_DIM) / h);
+                    h = MAX_DIM;
+                }
+            }
+
+            imgWidth = w;
+            imgHeight = h;
+
+            [workCanvas, origCanvas, effectCanvas, strokeMaskCanvas, strokePreviewCanvas].forEach(c => {
+                c.width = w;
+                c.height = h;
+            });
+
+            wCtx.clearRect(0, 0, w, h);
+            wCtx.drawImage(img, 0, 0, w, h);
+
+            oCtx.clearRect(0, 0, w, h);
+            oCtx.drawImage(img, 0, 0, w, h);
+
+            hasImage = true;
+            undoStack = [];
+            redoStack = [];
+            updateHistoryButtons();
+            rebuildEffectLayer();
+
+            // UI 전환
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('floatingTopControls').classList.remove('hidden');
+            document.getElementById('toolDock').classList.remove('hidden');
+            document.getElementById('compareBtn').disabled = false;
+            document.getElementById('exportBtn').disabled = false;
+
+            resizeDisplayCanvas();
+            fitCanvasToScreen();
+        }
+
+        /**
+         * 현재 선택된 효과(모자이크 / 블러 / 단색 / 복원)를 effectCanvas에 사전 렌더링
+         * -> 브러시 드래그 시 60fps 초고속 합성을 가능하게 함
+         */
+        function rebuildEffectLayer() {
+            if (!hasImage) return;
+            const activeEffect = currentTool === 'rect' ? rectEffect : currentTool;
+
+            eCtx.clearRect(0, 0, imgWidth, imgHeight);
+
+            if (activeEffect === 'mosaic') {
+                const blockSize = parseInt(document.getElementById('mosaicSizeSlider').value, 10);
+                renderPixelatedMosaic(origCanvas, eCtx, imgWidth, imgHeight, blockSize);
+            } else if (activeEffect === 'blur') {
+                const strength = parseInt(document.getElementById('blurStrengthSlider').value, 10);
+                renderGaussianBlur(origCanvas, eCtx, imgWidth, imgHeight, strength);
+            } else if (activeEffect === 'solid') {
+                eCtx.fillStyle = solidColor;
+                eCtx.fillRect(0, 0, imgWidth, imgHeight);
+            } else if (activeEffect === 'restore') {
+                eCtx.drawImage(origCanvas, 0, 0);
+            }
+        }
+
+        /**
+         * 초고속 픽셀 모자이크 생성 알고리즘 (하드웨어 가속 다운스케일 -> 최근접 이웃 업스케일)
+         */
+        function renderPixelatedMosaic(srcCanvas, targetCtx, w, h, blockSize) {
+            const smallW = Math.max(1, Math.ceil(w / blockSize));
+            const smallH = Math.max(1, Math.ceil(h / blockSize));
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = smallW;
+            tempCanvas.height = smallH;
+            const tCtx = tempCanvas.getContext('2d');
+
+            tCtx.imageSmoothingEnabled = true;
+            tCtx.drawImage(srcCanvas, 0, 0, smallW, smallH);
+
+            targetCtx.save();
+            targetCtx.imageSmoothingEnabled = false;
+            targetCtx.drawImage(tempCanvas, 0, 0, smallW, smallH, 0, 0, w, h);
+            targetCtx.restore();
+        }
+
+        /**
+         * 가우시안 블러 생성 (CSS Filter + iOS Safari 구형 호환 멀티패스 폴백)
+         */
+        function renderGaussianBlur(srcCanvas, targetCtx, w, h, strength) {
+            targetCtx.save();
+            if (typeof targetCtx.filter !== 'undefined') {
+                // 가장자리 투명 번짐 방지를 위해 약간 확대 후 블러 적용
+                targetCtx.filter = `blur(${strength}px)`;
+                targetCtx.drawImage(srcCanvas, -strength, -strength, w + strength * 2, h + strength * 2);
+                targetCtx.filter = 'none';
+            } else {
+                // 폴백: 다단계 축소-확대 스무딩 블러
+                const scale = Math.max(0.03, 1 / (strength * 0.75));
+                const sw = Math.max(1, Math.floor(w * scale));
+                const sh = Math.max(1, Math.floor(h * scale));
+                const tmp = document.createElement('canvas');
+                tmp.width = sw;
+                tmp.height = sh;
+                const tCtx = tmp.getContext('2d');
+                tCtx.imageSmoothingEnabled = true;
+                tCtx.drawImage(srcCanvas, 0, 0, sw, sh);
+
+                targetCtx.imageSmoothingEnabled = true;
+                targetCtx.drawImage(tmp, 0, 0, sw, sh, 0, 0, w, h);
+            }
+            targetCtx.restore();
+        }
+
+        /**
+         * 캔버스 화면 맞춤 및 줌/팬 제어
+         */
+        function fitCanvasToScreen() {
+            if (!hasImage) return;
+            const rect = displayCanvas.getBoundingClientRect();
+            const padding = 32;
+            const availW = Math.max(100, rect.width - padding * 2);
+            const availH = Math.max(100, rect.height - padding * 2);
+
+            zoom = Math.min(availW / imgWidth, availH / imgHeight, 1.5);
+            panX = (rect.width - imgWidth * zoom) / 2;
+            panY = (rect.height - imgHeight * zoom) / 2;
+            updateZoomLabel();
+            render();
+        }
+
+        function adjustZoom(factor) {
+            if (!hasImage) return;
+            const rect = displayCanvas.getBoundingClientRect();
+            zoomAtPoint(rect.width / 2, rect.height / 2, factor);
+        }
+
+        function zoomAtPoint(screenX, screenY, factor) {
+            const nextZoom = Math.min(8, Math.max(0.15, zoom * factor));
+            const actualFactor = nextZoom / zoom;
+            panX = screenX - (screenX - panX) * actualFactor;
+            panY = screenY - (screenY - panY) * actualFactor;
+            zoom = nextZoom;
+            updateZoomLabel();
+            render();
+        }
+
+        function updateZoomLabel() {
+            document.getElementById('zoomLabel').textContent = `${Math.round(zoom * 100)}%`;
+        }
+
+        function screenToImage(clientX, clientY) {
+            const rect = displayCanvas.getBoundingClientRect();
+            const sx = clientX - rect.left;
+            const sy = clientY - rect.top;
+            return {
+                x: (sx - panX) / zoom,
+                y: (sy - panY) / zoom,
+                sx,
+                sy
+            };
+        }
+
+        /**
+         * 히스토리(Undo / Redo / 전체 초기화)
+         */
+        function pushHistory() {
+            if (!hasImage) return;
+            try {
+                const snap = wCtx.getImageData(0, 0, imgWidth, imgHeight);
+                undoStack.push(snap);
+                if (undoStack.length > MAX_HISTORY) undoStack.shift();
+                redoStack = [];
+                updateHistoryButtons();
+            } catch (err) {
+                console.error('히스토리 저장 실패:', err);
+            }
+        }
+
+        function undo() {
+            if (undoStack.length === 0) return;
+            redoStack.push(wCtx.getImageData(0, 0, imgWidth, imgHeight));
+            const prev = undoStack.pop();
+            wCtx.putImageData(prev, 0, 0);
+            updateHistoryButtons();
+            render();
+            showToast('이전 단계로 되돌렸습니다.');
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            undoStack.push(wCtx.getImageData(0, 0, imgWidth, imgHeight));
+            const next = redoStack.pop();
+            wCtx.putImageData(next, 0, 0);
+            updateHistoryButtons();
+            render();
+            showToast('다시 실행했습니다.');
+        }
+
+        function resetAllEdits() {
+            if (!hasImage) return;
+            pushHistory();
+            wCtx.clearRect(0, 0, imgWidth, imgHeight);
+            wCtx.drawImage(origCanvas, 0, 0);
+            render();
+            showToast('모든 가림막을 초기화했습니다.');
+        }
+
+        function updateHistoryButtons() {
+            document.getElementById('undoBtn').disabled = undoStack.length === 0;
+            document.getElementById('redoBtn').disabled = redoStack.length === 0;
+        }
+
+        /**
+         * 포인터 이벤트 처리 (터치, 애플 펜슬, 마우스, 핀치 줌 통합)
+         */
+        function onPointerDown(e) {
+            if (!hasImage) return;
+            displayCanvas.setPointerCapture(e.pointerId);
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            // 두 손가락 멀티터치 시 핀치 줌/이동 전환
+            if (activePointers.size >= 2) {
+                if (isDrawing) {
+                    // 진행 중이던 획 취소
+                    isDrawing = false;
+                    smCtx.clearRect(0, 0, imgWidth, imgHeight);
+                    rectStartPt = null;
+                    rectEndPt = null;
+                }
+                const pts = Array.from(activePointers.values());
+                prevPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                prevPinchCenter = {
+                    x: (pts[0].x + pts[1].x) / 2,
+                    y: (pts[0].y + pts[1].y) / 2
+                };
+                render();
+                return;
+            }
+
+            const pt = screenToImage(e.clientX, e.clientY);
+            currentCursorScreen = { x: pt.sx, y: pt.sy };
+
+            // 스포이드(배경색 찍기) 모드 활성 시 터치 지점의 색상 추출
+            if (isEyedropperActive) {
+                const px = Math.min(imgWidth - 1, Math.max(0, Math.floor(pt.x)));
+                const py = Math.min(imgHeight - 1, Math.max(0, Math.floor(pt.y)));
+                const pixel = oCtx.getImageData(px, py, 1, 1).data;
+                const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+                setSolidColor(hex);
+                isEyedropperActive = false;
+                document.getElementById('eyedropperBtn').classList.remove('ring-2', 'ring-emerald-400');
+                showToast(`배경색 추출 완료 (${hex.toUpperCase()})`);
+                return;
+            }
+
+            isDrawing = true;
+            lastImgPt = pt;
+
+            if (currentTool === 'rect') {
+                rectStartPt = pt;
+                rectEndPt = pt;
+                render();
+            } else if (['mosaic', 'blur', 'solid', 'restore'].includes(currentTool)) {
+                smCtx.clearRect(0, 0, imgWidth, imgHeight);
+                drawMaskDot(pt.x, pt.y);
+                render();
+            }
+        }
+
+        function onPointerMove(e) {
+            if (!hasImage) return;
+
+            if (activePointers.has(e.pointerId)) {
+                activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            }
+
+            // 두 손가락 핀치 줌 & 팬
+            if (activePointers.size >= 2) {
+                const pts = Array.from(activePointers.values());
+                const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                const center = {
+                    x: (pts[0].x + pts[1].x) / 2,
+                    y: (pts[0].y + pts[1].y) / 2
+                };
+
+                if (prevPinchDist && prevPinchCenter) {
+                    const rect = displayCanvas.getBoundingClientRect();
+                    panX += center.x - prevPinchCenter.x;
+                    panY += center.y - prevPinchCenter.y;
+                    zoomAtPoint(center.x - rect.left, center.y - rect.top, dist / prevPinchDist);
+                }
+
+                prevPinchDist = dist;
+                prevPinchCenter = center;
+                return;
+            }
+
+            const pt = screenToImage(e.clientX, e.clientY);
+            currentCursorScreen = { x: pt.sx, y: pt.sy };
+
+            if (!isDrawing) {
+                if (['mosaic', 'blur', 'solid', 'restore'].includes(currentTool)) {
+                    render();
+                }
+                return;
+            }
+
+            if (currentTool === 'pan') {
+                panX += pt.sx - lastImgPt.sx;
+                panY += pt.sy - lastImgPt.sy;
+                lastImgPt = pt;
+                render();
+            } else if (currentTool === 'rect') {
+                rectEndPt = pt;
+                render();
+            } else if (['mosaic', 'blur', 'solid', 'restore'].includes(currentTool)) {
+                drawMaskSegment(lastImgPt.x, lastImgPt.y, pt.x, pt.y);
+                lastImgPt = pt;
+                render();
+            }
+        }
+
+        function onPointerUp(e) {
+            activePointers.delete(e.pointerId);
+            if (activePointers.size < 2) {
+                prevPinchDist = null;
+                prevPinchCenter = null;
+            }
+
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (currentTool === 'rect' && rectStartPt && rectEndPt) {
+                const x = Math.min(rectStartPt.x, rectEndPt.x);
+                const y = Math.min(rectStartPt.y, rectEndPt.y);
+                const w = Math.abs(rectEndPt.x - rectStartPt.x);
+                const h = Math.abs(rectEndPt.y - rectStartPt.y);
+
+                if (w > 4 && h > 4) {
+                    pushHistory();
+                    wCtx.drawImage(effectCanvas, x, y, w, h, x, y, w, h);
+                }
+                rectStartPt = null;
+                rectEndPt = null;
+                render();
+            } else if (['mosaic', 'blur', 'solid', 'restore'].includes(currentTool)) {
+                pushHistory();
+                commitStrokeToWorkCanvas();
+                smCtx.clearRect(0, 0, imgWidth, imgHeight);
+                render();
+            }
+        }
+
+        /**
+         * 브러시 마스크 그리기 및 작업 캔버스 병합
+         */
+        function getBrushRadiusInImage() {
+            const brushPx = parseInt(document.getElementById('brushSizeSlider').value, 10);
+            return Math.max(2, (brushPx / 2) / zoom);
+        }
+
+        function drawMaskDot(x, y) {
+            const r = getBrushRadiusInImage();
+            smCtx.fillStyle = '#ffffff';
+            smCtx.beginPath();
+            smCtx.arc(x, y, r, 0, Math.PI * 2);
+            smCtx.fill();
+        }
+
+        function drawMaskSegment(x0, y0, x1, y1) {
+            const r = getBrushRadiusInImage();
+            smCtx.strokeStyle = '#ffffff';
+            smCtx.lineWidth = r * 2;
+            smCtx.lineCap = 'round';
+            smCtx.lineJoin = 'round';
+            smCtx.beginPath();
+            smCtx.moveTo(x0, y0);
+            smCtx.lineTo(x1, y1);
+            smCtx.stroke();
+        }
+
+        function commitStrokeToWorkCanvas() {
+            spCtx.globalCompositeOperation = 'source-over';
+            spCtx.clearRect(0, 0, imgWidth, imgHeight);
+            spCtx.drawImage(strokeMaskCanvas, 0, 0);
+
+            spCtx.globalCompositeOperation = 'source-in';
+            spCtx.drawImage(effectCanvas, 0, 0);
+
+            wCtx.drawImage(strokePreviewCanvas, 0, 0);
+        }
+
+        /**
+         * 메인 60fps 렌더링 루프
+         */
+        function render() {
+            const rect = displayCanvas.getBoundingClientRect();
+            dCtx.clearRect(0, 0, rect.width, rect.height);
+
+            if (!hasImage) return;
+
+            dCtx.save();
+            dCtx.translate(panX, panY);
+            dCtx.scale(zoom, zoom);
+
+            dCtx.imageSmoothingEnabled = zoom < 3;
+
+            if (isComparingOriginal) {
+                dCtx.drawImage(origCanvas, 0, 0);
+            } else {
+                // 1. 지금까지 확정된 작업본 그리기
+                dCtx.drawImage(workCanvas, 0, 0);
+
+                // 2. 현재 드래그 중인 브러시 획이 있다면 실시간 미리보기 합성
+                if (isDrawing && ['mosaic', 'blur', 'solid', 'restore'].includes(currentTool)) {
+                    spCtx.globalCompositeOperation = 'source-over';
+                    spCtx.clearRect(0, 0, imgWidth, imgHeight);
+                    spCtx.drawImage(strokeMaskCanvas, 0, 0);
+                    spCtx.globalCompositeOperation = 'source-in';
+                    spCtx.drawImage(effectCanvas, 0, 0);
+
+                    dCtx.drawImage(strokePreviewCanvas, 0, 0);
+                }
+
+                // 3. 사각 가림막 드래그 중일 때 실시간 미리보기
+                if (isDrawing && currentTool === 'rect' && rectStartPt && rectEndPt) {
+                    const rx = Math.min(rectStartPt.x, rectEndPt.x);
+                    const ry = Math.min(rectStartPt.y, rectEndPt.y);
+                    const rw = Math.abs(rectEndPt.x - rectStartPt.x);
+                    const rh = Math.abs(rectEndPt.y - rectStartPt.y);
+
+                    if (rw > 1 && rh > 1) {
+                        dCtx.drawImage(effectCanvas, rx, ry, rw, rh, rx, ry, rw, rh);
+                        dCtx.strokeStyle = '#10b981';
+                        dCtx.lineWidth = 2 / zoom;
+                        dCtx.setLineDash([6 / zoom, 4 / zoom]);
+                        dCtx.strokeRect(rx, ry, rw, rh);
+                        dCtx.setLineDash([]);
+                    }
+                }
+            }
+
+            // 캔버스 외곽선
+            dCtx.strokeStyle = 'rgba(161, 161, 170, 0.35)';
+            dCtx.lineWidth = 1 / zoom;
+            dCtx.strokeRect(0, 0, imgWidth, imgHeight);
+
+            dCtx.restore();
+
+            // 브러시 커서 가이드 링 표시
+            if (['mosaic', 'blur', 'solid', 'restore'].includes(currentTool) && currentCursorScreen && !isEyedropperActive) {
+                const brushPx = parseInt(document.getElementById('brushSizeSlider').value, 10);
+                dCtx.save();
+                dCtx.beginPath();
+                dCtx.arc(currentCursorScreen.x, currentCursorScreen.y, brushPx / 2, 0, Math.PI * 2);
+                dCtx.strokeStyle = currentTool === 'restore' ? '#f59e0b' : '#10b981';
+                dCtx.lineWidth = 2;
+                dCtx.stroke();
+                dCtx.restore();
+            }
+        }
+
+        /**
+         * 도구 전환 및 옵션 UI 업데이트
+         */
+        function selectTool(tool) {
+            currentTool = tool;
+            isEyedropperActive = false;
+            document.getElementById('eyedropperBtn').classList.remove('ring-2', 'ring-emerald-400');
+
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.classList.remove('bg-emerald-600', 'text-white', 'shadow-sm');
+                btn.classList.add('bg-zinc-800/80', 'text-zinc-300');
+            });
+
+            const activeBtn = document.getElementById(`tool-${tool}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-zinc-800/80', 'text-zinc-300');
+                activeBtn.classList.add('bg-emerald-600', 'text-white', 'shadow-sm');
+            }
+
+            updateOptionBarVisibility();
+            rebuildEffectLayer();
+            render();
+        }
+
+        function setRectEffect(effect) {
+            rectEffect = effect;
+            document.querySelectorAll('.rect-style-btn').forEach(btn => {
+                btn.className = 'rect-style-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 hover:text-white transition';
+            });
+            const active = document.getElementById(`rect-${effect}`);
+            if (active) {
+                active.className = 'rect-style-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600 text-white transition';
+            }
+            updateOptionBarVisibility();
+            rebuildEffectLayer();
+        }
+
+        function updateOptionBarVisibility() {
+            const brushGroup = document.getElementById('brushSizeGroup');
+            const rectGroup = document.getElementById('rectStyleGroup');
+            const mosaicGroup = document.getElementById('mosaicIntensityGroup');
+            const blurGroup = document.getElementById('blurIntensityGroup');
+            const solidGroup = document.getElementById('solidColorGroup');
+            const helperGroup = document.getElementById('helperTextGroup');
+            const helperLabel = document.getElementById('helperTextLabel');
+
+            [brushGroup, rectGroup, mosaicGroup, blurGroup, solidGroup, helperGroup].forEach(el => el.classList.add('hidden'));
+
+            const effectiveMode = currentTool === 'rect' ? rectEffect : currentTool;
+
+            if (currentTool === 'rect') {
+                rectGroup.classList.remove('hidden');
+            } else if (['mosaic', 'blur', 'solid', 'restore'].includes(currentTool)) {
+                brushGroup.classList.remove('hidden');
+            }
+
+            if (effectiveMode === 'mosaic') {
+                mosaicGroup.classList.remove('hidden');
+            } else if (effectiveMode === 'blur') {
+                blurGroup.classList.remove('hidden');
+            } else if (effectiveMode === 'solid') {
+                solidGroup.classList.remove('hidden');
+            } else if (currentTool === 'restore') {
+                helperLabel.textContent = '문지른 부위만 원래 사진으로 복원합니다.';
+                helperGroup.classList.remove('hidden');
+            } else if (currentTool === 'pan') {
+                helperLabel.textContent = '드래그로 화면 이동, 두 손가락으로 확대/축소합니다.';
+                helperGroup.classList.remove('hidden');
+            }
+        }
+
+        function setSolidColor(hex) {
+            solidColor = hex;
+            document.getElementById('customColorInput').value = hex;
+
+            document.querySelectorAll('.solid-swatch').forEach(el => {
+                el.classList.remove('border-emerald-400');
+                el.classList.add('border-zinc-600');
+            });
+
+            if (hex.toLowerCase() === '#09090b') document.getElementById('swatch-black').classList.replace('border-zinc-600', 'border-emerald-400');
+            if (hex.toLowerCase() === '#ffffff') document.getElementById('swatch-white').classList.replace('border-zinc-600', 'border-emerald-400');
+            if (hex.toLowerCase() === '#ef4444') document.getElementById('swatch-red').classList.replace('border-zinc-600', 'border-emerald-400');
+
+            rebuildEffectLayer();
+        }
+
+        function activateEyedropper() {
+            isEyedropperActive = !isEyedropperActive;
+            const btn = document.getElementById('eyedropperBtn');
+            if (isEyedropperActive) {
+                btn.classList.add('ring-2', 'ring-emerald-400');
+                showToast('사진에서 추출할 배경 부분을 터치하세요.');
+            } else {
+                btn.classList.remove('ring-2', 'ring-emerald-400');
+            }
+        }
+
+        function onOptionChanged() {
+            document.getElementById('brushSizeValue').textContent = document.getElementById('brushSizeSlider').value + 'px';
+            render();
+        }
+
+        function onEffectParamChanged() {
+            document.getElementById('mosaicSizeValue').textContent = document.getElementById('mosaicSizeSlider').value + 'px';
+            document.getElementById('blurStrengthValue').textContent = document.getElementById('blurStrengthSlider').value;
+            rebuildEffectLayer();
+        }
+
+        // 내보내기용 Blob 상태 관리
+        let currentExportBlob = null;
+        let currentExportBlobUrl = null;
+        let currentExportFileName = 'masked_safe.png';
+
+        /**
+         * EXIF 메타데이터가 자동 파기된 고해상도 PNG Blob 생성 및 모달 표시
+         */
+        function exportSecureImage() {
+            if (!hasImage) return;
+
+            const now = new Date();
+            const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+            currentExportFileName = `보안마스킹_${stamp}.png`;
+
+            // 고해상도 이미지도 Safari에서 안정적으로 처리되도록 toBlob 사용
+            workCanvas.toBlob((blob) => {
+                if (!blob) {
+                    showToast('이미지 생성 중 오류가 발생했습니다.');
+                    return;
+                }
+
+                if (currentExportBlobUrl) {
+                    URL.revokeObjectURL(currentExportBlobUrl);
+                }
+
+                currentExportBlob = blob;
+                currentExportBlobUrl = URL.createObjectURL(blob);
+
+                const previewImg = document.getElementById('exportedPreviewImg');
+                const downloadLink = document.getElementById('directDownloadLink');
+
+                previewImg.src = currentExportBlobUrl;
+                downloadLink.href = currentExportBlobUrl;
+                downloadLink.download = currentExportFileName;
+
+                const modal = document.getElementById('exportModal');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }, 'image/png');
+        }
+
+        /**
+         * iPadOS 네이티브 공유 시트 호출 (공유 메뉴에서 '이미지 저장' 탭 시 사진첩에 즉시 저장)
+         */
+        async function shareOrSaveToPhotos() {
+            if (!currentExportBlob) return;
+
+            try {
+                const file = new File([currentExportBlob], currentExportFileName, { type: 'image/png' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: currentExportFileName
+                    });
+                    return;
+                }
+            } catch (err) {
+                // 사용자가 공유 창을 직접 닫은 경우 무시
+                if (err && err.name === 'AbortError') return;
+                console.warn('공유 시트 호출 실패, 기본 다운로드로 전환:', err);
+            }
+
+            // Web Share API 미지원 브라우저 폴백: 파일 다운로드 실행
+            document.getElementById('directDownloadLink').click();
+        }
+
+        function onDirectDownloadClick() {
+            showToast('다운로드를 시작했습니다. (파일 앱 또는 다운로드 목록 확인)');
+        }
+
+        function closeExportModal() {
+            const modal = document.getElementById('exportModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        let toastTimer;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastText').textContent = msg;
+            toast.classList.remove('hidden', 'toast-active');
+            toast.classList.add('flex');
+            void toast.offsetWidth;
+            toast.classList.add('toast-active');
+
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('flex');
+            }, 2200);
+        }
+    </script>
+</body>
+</html>
